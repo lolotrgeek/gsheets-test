@@ -2,30 +2,112 @@
 <html>
 
 <head>
-  <title>Google Sheets API Quickstart</title>
+  <title>Google Sheets API Blog</title>
   <meta charset="utf-8" />
 </head>
 
 <body>
   <p>Google Sheets API</p>
-  
+
   <pre id="content" style="white-space: pre-wrap;"></pre>
 
   <!-- https://developers.google.com/sheets/api/samples/reading -->
   <script type="text/javascript">
-    const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
-    const sheet = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
-    const query = 'CMS!A1'
-    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheet + '/values/' + query + '?key=' + apikey
-    fetch(url)
-      .then(function (response) {
-        return response.json()
-      })
-      .then(function (myJson) {
-        let content = document.getElementById('content')
-        content.innerHTML = `<p>${JSON.stringify(myJson)}</p>`
-        console.log(JSON.stringify(myJson))
-      })
+
+
+    /**
+    *  CMS
+    */
+
+    let titles = 'CMS!A3:A'
+    let urls = 'CMS!B3:B'
+    let contents = 'CMS!E3:E'
+
+    const queries = {
+      links: urls,
+      posts: [titles, urls, contents],
+    }
+
+    function buildQuery(query) {
+      const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
+      const sheet = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
+      const base = 'https://sheets.googleapis.com/v4/spreadsheets/'
+      if (Array.isArray(query)) {
+        //parse a batch query
+        let ranges = ''
+        query.map((range, index) => (index === 0) ? ranges += 'ranges=' + range : ranges += '&ranges=' + range)
+        // deprecated, works but not 'functional'
+        // for (i = 0; i < query.length; i++) {
+        //   if (i === 0) { ranges += 'ranges=' + query[i] }
+        //   else { ranges += '&ranges=' + query[i] }
+        // }
+        let url = base + sheet + '/values:batchGet?' + ranges + '&key=' + apikey
+        console.log(url)
+        return url
+      } else {
+        // parse a single query
+        let url = base + sheet + '/values/' + query + '?key=' + apikey
+        console.log(url)
+        return url
+      }
+
+    }
+
+    function getQuery(url, func) {
+      fetch(url)
+        .then(function (response) {
+          return response.json()
+        })
+        .then(query => func(query))
+    }
+
+    function testQuery(query) {
+      console.log(JSON.stringify(query))
+    }
+
+    // getQuery(buildQuery(['CMS!A3:A', 'CMS!B3:B']), testQuery)
+
+
+    function buildRoutes(query) {
+      let links = query.values
+      links.map(link => routes['/' + link] = content)
+
+    }
+
+    function allPosts(query) {
+      console.log(JSON.stringify(query))
+      let content = document.getElementById('content')
+      
+
+      let titles = query.valueRanges[0].values
+      let links = query.valueRanges[1].values
+      let posts = query.valueRanges[2].values
+
+      console.log(posts)
+
+      let postList = titles.map((title, index) => '<li class="post-title"><a href="/'+links[index]+'">'+title+'</a></li>').join('')
+      let blog ='<ul class="posts">'+postList+'</ul>'
+      
+      let routes = {}
+      routes['/'] = blog
+      routes['/index.html'] = blog
+      links.map((link,index) => routes['/' + link] = posts[index][0])
+      console.log(routes)
+
+      window.onpopstate = () => content.innerHTML = routes[window.location.pathname]
+      let onNavItemClick = (pathName) => {
+        window.history.pushState({}, pathName, window.location.origin + pathName)
+        content.innerHTML = routes[pathName]
+      }
+      content.innerHTML = routes[window.location.pathname]
+      // single post: format title + url + content
+
+    }
+
+    getQuery(buildQuery(queries.posts), allPosts)
+    /**
+    * ROUTING
+    */
 
   </script>
 </body>
