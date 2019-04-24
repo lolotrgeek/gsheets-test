@@ -7,108 +7,146 @@
 </head>
 
 <body>
-  <p>Google Sheets API</p>
+  <p>Google Sheets API Blog</p>
 
   <pre id="content" style="white-space: pre-wrap;"></pre>
 
   <!-- https://developers.google.com/sheets/api/samples/reading -->
   <script type="text/javascript">
-
-
-    /**
-    *  CMS
-    */
-
-    let titles = 'CMS!A3:A'
-    let urls = 'CMS!B3:B'
-    let contents = 'CMS!E3:E'
+    // sheet
+    let sheet = 'CMS!'
+    // column letters
+    let titles = 'A'
+    let urls = 'B'
+    let tags = 'C'
+    let dates = 'D'
+    let contents = 'E'
+    // rows 
+    let firstContentRow = 3
+    // parsers
+    let getAll = (column, row) => sheet + column + row + ':' + column
+    let get = (column, row) => sheet + column + row
 
     const queries = {
-      links: urls,
-      posts: [titles, urls, contents],
+      titles: getAll(titles, firstContentRow),
+      links: getAll(urls, firstContentRow),
+      tags: getAll(tags, firstContentRow),
+      dates: getAll(dates, firstContentRow),
+      contents: getAll(contents, firstContentRow),
+      posts: [getAll(titles, firstContentRow), getAll(urls, firstContentRow), getAll(tags, firstContentRow), getAll(dates, firstContentRow)],
     }
+    const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
+    const sheetid = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
+    const base = 'https://sheets.googleapis.com/v4/spreadsheets/'
 
-    function buildQuery(query) {
-      const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
-      const sheet = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
-      const base = 'https://sheets.googleapis.com/v4/spreadsheets/'
-      if (Array.isArray(query)) {
+    let content = document.getElementById('content')
+
+    const buildQuery = (query) => new Promise((resolve, reject) => {
+      if (!query) {
+        reject('404')
+      }
+      else if (Array.isArray(query)) {
         //parse a batch query
         let ranges = ''
         query.map((range, index) => (index === 0) ? ranges += 'ranges=' + range : ranges += '&ranges=' + range)
-        // deprecated, works but not 'functional'
-        // for (i = 0; i < query.length; i++) {
-        //   if (i === 0) { ranges += 'ranges=' + query[i] }
-        //   else { ranges += '&ranges=' + query[i] }
-        // }
-        let url = base + sheet + '/values:batchGet?' + ranges + '&key=' + apikey
-        console.log(url)
-        return url
-      } else {
+        resolve(base + sheetid + '/values:batchGet?' + ranges + '&key=' + apikey)
+      }
+      else {
         // parse a single query
-        let url = base + sheet + '/values/' + query + '?key=' + apikey
-        console.log(url)
-        return url
+        resolve(base + sheetid + '/values/' + query + '?key=' + apikey)
       }
+    })
 
-    }
 
-    function getQuery(url, func) {
+    const getQuery = async (url) => new Promise((resolve, reject) => {
       fetch(url)
-        .then(function (response) {
-          return response.json()
-        })
-        .then(query => func(query))
-    }
+        .then(response => response.json())
+        .then(query => resolve(query))
+        .catch(err => reject(err))
+    })
 
-    function testQuery(query) {
-      console.log(JSON.stringify(query))
-    }
-
-    // getQuery(buildQuery(['CMS!A3:A', 'CMS!B3:B']), testQuery)
-
-
-    function buildRoutes(query) {
-      let links = query.values
-      links.map(link => routes['/' + link] = content)
-
-    }
-
-    function allPosts(query) {
-      console.log(JSON.stringify(query))
-      let content = document.getElementById('content')
-      
-
-      let titles = query.valueRanges[0].values
-      let links = query.valueRanges[1].values
-      let posts = query.valueRanges[2].values
-
-      console.log(posts)
-
-      let postList = titles.map((title, index) => '<li class="post-title"><a href="/'+links[index]+'">'+title+'</a></li>').join('')
-      let blog ='<ul class="posts">'+postList+'</ul>'
-      
-      let routes = {}
-      routes['/'] = blog
-      routes['/index.html'] = blog
-      links.map((link,index) => routes['/' + link] = posts[index][0])
-      console.log(routes)
-
-      window.onpopstate = () => content.innerHTML = routes[window.location.pathname]
-      let onNavItemClick = (pathName) => {
-        window.history.pushState({}, pathName, window.location.origin + pathName)
-        content.innerHTML = routes[pathName]
+    const parseQuery = async (query) => new Promise((resolve, reject) => {
+      let result = {}
+      if (typeof query !== 'object') {
+        console.log('query not object')
+        reject('404')
       }
-      content.innerHTML = routes[window.location.pathname]
-      // single post: format title + url + content
+      else if (query.valueRanges) {
+        if (query.valueRanges.length !== 4) {
+          console.log('query to short')
+          reject('404')
+        } else {
+          result.titles = query.valueRanges[0].values
+          result.links = query.valueRanges[1].values
+          result.tags = query.valueRanges[2].values
+          result.dates = query.valueRanges[3].values
+          resolve(result)
+        }
+      }
+      else if (query.values) {
+        result.post = query.values
+        resolve(result)
+      }
+    })
+
+    const buildHome = (result) => new Promise((resolve, reject) => {
+      let blog =  `<ul class="posts">
+      ${result.titles.map((title, index) => `<li class="post-title"><a href="/${result.links[index]} ">${title}</a></li>`).join('')}
+      </ul>`
+      resolve(blog)
+    })
+
+    const buildRoutes = async (result) => new Promise((resolve, reject) => {
+      let routes = {}
+      buildHome(result)
+        .then(home => {
+          routes['/'] = home
+          routes['/index.html'] = home
+        })
+        .then(() => result.links.map((link, index) => routes['/' + link] = index + 3))
+        .then(() => console.log('routes: ' + JSON.stringify(routes)))
+        .then(() => resolve(routes))
+    })
+
+    const followRoute = (routes) => {
+      let path = routes[window.location.pathname]
+      return new Promise((resolve, reject) => {
+        if (typeof path === 'number') {
+          let post = get(contents, path)
+          buildQuery(post)
+            .then(url => getQuery(url))
+            .then(query => parseQuery(query))
+            .then(result => resolve(result.post))
+            .catch(err => reject(err))
+        }
+        else {
+          resolve(path)
+        }
+      })
+    }
+
+    const buildSite = async () => {
+      // build at first visit and cache routes
+      buildQuery(queries.posts)
+        .then(url => getQuery(url))
+        .then(query => parseQuery(query))
+        .then(result => buildRoutes(result))
+        .then(async (routes) => {
+          window.onpopstate = async () => {
+            content.innerHTML = await followRoute(routes)
+          }
+          // let onNavItemClick = (pathName) => {
+          //   window.history.pushState({}, pathName, window.location.origin + pathName)
+          //   content.innerHTML = routes[pathName]
+          // }
+          content.innerHTML = await followRoute(routes)
+        })
+        .catch(err => reject(err))
+
 
     }
 
-    getQuery(buildQuery(queries.posts), allPosts)
-    /**
-    * ROUTING
-    */
-
+    buildSite()
   </script>
 </body>
 
