@@ -10,7 +10,7 @@ let contents = 'E'
 let firstContentRow = 4
 
 //special queries
-let lastedit = sheet + 'B1'
+let lastEdit = sheet + 'B1'
 
 // parsers
 let getAll = (column, row) => sheet + column + row + ':' + column
@@ -22,7 +22,7 @@ const queries = {
     tags: getAll(tags, firstContentRow),
     dates: getAll(dates, firstContentRow),
     contents: getAll(contents, firstContentRow),
-    posts: [getAll(titles, firstContentRow), getAll(urls, firstContentRow), getAll(tags, firstContentRow), getAll(dates, firstContentRow), lastedit],
+    posts: [getAll(titles, firstContentRow), getAll(urls, firstContentRow), getAll(tags, firstContentRow), getAll(dates, firstContentRow), lastEdit],
 }
 const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
 const sheetid = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
@@ -68,7 +68,7 @@ const parseQuery = async (query) => new Promise((resolve, reject) => {
             result.links = query.valueRanges[1].values
             result.tags = query.valueRanges[2].values
             result.dates = query.valueRanges[3].values
-            result.lastedit = query.valueRanges[4].values
+            result.lastEdit = query.valueRanges[4].values
             resolve(result)
         }
     }
@@ -87,7 +87,7 @@ const buildHome = (result) => new Promise((resolve, reject) => {
 
 const buildRoutes = async (result) => new Promise((resolve, reject) => {
     let routes = {}
-    result.lastedit = routes.lastedit
+    result.lastEdit = routes.lastEdit
     buildHome(result)
         .then(home => {
             routes['/'] = home
@@ -121,16 +121,17 @@ const checkCache = () => new Promise((resolve, reject) => {
     if (!localroutes) {
         reject('No local routes found')
     } else {
-        buildQuery(lastedit)
+        buildQuery(lastEdit)
             .then(url => getQuery(url))
             .then(result => {
-                console.log(result.values[0][0])
-                if (typeof parseInt(result.values[0][0]) !== 'number') {
-                    reject('invalid lastedit')
+                // console.log(result.values[0][0])
+                let serverTime = parseInt(result.values[0][0])
+                if (typeof serverTime !== 'number') {
+                    reject('invalid lastEdit')
                 }
                 else {
                     let routes = JSON.parse(localroutes)
-                    if (result > routes.lastedit) {
+                    if (serverTime > routes.lastEdit) {
                         window.localStorage.clear()
                         reject('local routes old, getting new ones')
                     }
