@@ -1,3 +1,6 @@
+
+
+
 // sheet
 let sheet = 'CMS!'
 // column letters
@@ -123,7 +126,7 @@ const followRoute = (routes) => {
                             let storePost = {}
                             storePost.post = result.post
                             storePost.lastEdit = result.lastEdit
-                            console.log('saving post: ' + storePost.toString())
+                            console.log('saving post')
                             window.localStorage.setItem(path.toString(), JSON.stringify(storePost))
                             resolve(result.post)
                         })
@@ -154,7 +157,8 @@ const checkCache = (name) => new Promise((resolve, reject) => {
                 else {
                     let foundItem = JSON.parse(localItem)
                     if (serverTime > foundItem.lastEdit) {
-                        window.localStorage.clear()
+                        // window.localStorage.clear()
+                        window.localStorage.removeItem(name)
                         reject('local item old, get new one')
                     }
                     else {
