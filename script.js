@@ -35,14 +35,18 @@ const buildQuery = (query) => new Promise((resolve, reject) => {
         reject('404')
     }
     else if (Array.isArray(query)) {
-        //parse a batch query
+        console.log('building batch query')
         let ranges = ''
         query.map((range, index) => (index === 0) ? ranges += 'ranges=' + range : ranges += '&ranges=' + range)
-        resolve(base + sheetid + '/values:batchGet?' + ranges + '&key=' + apikey)
+        let url = base + sheetid + '/values:batchGet?' + ranges + '&key=' + apikey
+        console.log(url)
+        resolve(url)
     }
     else {
-        // parse a single query
-        resolve(base + sheetid + '/values/' + query + '?key=' + apikey)
+        console.log('building single query')
+        let url = base + sheetid + '/values/' + query + '?key=' + apikey
+        console.log(url)
+        resolve(url)
     }
 })
 
@@ -82,7 +86,9 @@ const buildHome = (result) => new Promise((resolve, reject) => {
     let blog = `<ul class="posts">
       ${result.titles.map((title, index) => `<li class="post-title"><a href="/${result.links[index]} ">${title}</a></li>`).join('')}
       </ul>`
+    console.log(blog)
     resolve(blog)
+
 })
 
 const buildRoutes = async (result) => new Promise((resolve, reject) => {
@@ -101,13 +107,29 @@ const buildRoutes = async (result) => new Promise((resolve, reject) => {
 const followRoute = (routes) => {
     let path = routes[window.location.pathname]
     return new Promise((resolve, reject) => {
+        // get a post
         if (typeof path === 'number') {
             let post = get(contents, path)
-            buildQuery(post)
-                .then(url => getQuery(url))
-                .then(query => parseQuery(query))
-                .then(result => resolve(result.post))
-                .catch(err => reject(err))
+            checkCache(path.toString())
+                .then(posts => {
+                    console.log('found post in cache')
+                    resolve(posts.post)})
+                .catch(err => {
+                    console.log(err)
+                    buildQuery(post)
+                        .then(url => getQuery(url))
+                        .then(query => parseQuery(query))
+                        .then(result => {
+                            let storePost = {}
+                            storePost.post = result.post
+                            storePost.lastEdit = result.lastEdit
+                            console.log('saving post: ' + storePost.toString())
+                            window.localStorage.setItem(path.toString(), JSON.stringify(storePost))
+                            resolve(result.post)
+                        })
+                        .catch(err => reject(err))
+                })
+
         }
         else {
             resolve(path)
@@ -116,58 +138,69 @@ const followRoute = (routes) => {
 }
 
 
-const checkCache = () => new Promise((resolve, reject) => {
-    let localroutes = window.localStorage.getItem('routes')
-    if (!localroutes) {
-        reject('No local routes found')
+const checkCache = (name) => new Promise((resolve, reject) => {
+    let localItem = window.localStorage.getItem(name)
+    if (!localItem) {
+        reject('No local ' + name + ' found')
     } else {
         buildQuery(lastEdit)
             .then(url => getQuery(url))
             .then(result => {
-                // console.log(result.values[0][0])
                 let serverTime = parseInt(result.values[0][0])
+                console.log('Last Edit: ' + serverTime)
                 if (typeof serverTime !== 'number') {
                     reject('invalid lastEdit')
                 }
                 else {
-                    let routes = JSON.parse(localroutes)
-                    if (serverTime > routes.lastEdit) {
+                    let foundItem = JSON.parse(localItem)
+                    if (serverTime > foundItem.lastEdit) {
                         window.localStorage.clear()
-                        reject('local routes old, getting new ones')
+                        reject('local item old, get new one')
                     }
                     else {
-                        resolve(routes)
+                        resolve(foundItem)
                     }
                 }
             })
     }
 })
 
-const renderRoutes = async (routes) => {
-    window.onpopstate = async () => {
-        content.innerHTML = await followRoute(routes)
+const renderRoutes = (routes) => {
+    window.onpopstate = () => {
+        followRoute(routes)
+            .then(route => content.innerHTML = route)
+            .catch(err => content.innerHTML = err) // TODO: retry fetch
     }
-    // let onNavItemClick = (pathName) => {
-    //   window.history.pushState({}, pathName, window.location.origin + pathName)
-    //   content.innerHTML = routes[pathName]
-    // }
-    content.innerHTML = await followRoute(routes)
+    followRoute(routes)
+        .then(route => content.innerHTML = route)
+        .catch(err => content.innerHTML = err) // TODO: retry fetch
 }
 
 const buildSite = async () => {
-    checkCache()
-        .then(routes => renderRoutes(routes))
+    checkCache('routes')
+        .then(routes => {
+            console.log('found routes in cache')
+            console.log(routes)
+            renderRoutes(routes)
+        })
         .catch(err => {
             console.log(err)
+            // get from cms
             buildQuery(queries.posts)
                 .then(url => getQuery(url))
                 .then(query => parseQuery(query))
                 .then(result => buildRoutes(result))
                 .then(routes => {
+                    console.log('getting routes from cms')
+                    console.log(routes)
                     renderRoutes(routes)
+                    console.log('caching routes')
                     window.localStorage.setItem('routes', JSON.stringify(routes))
+                    resolve(routes)
                 })
                 .catch(err => console.log(err))
         })
+
+
 }
 buildSite()
