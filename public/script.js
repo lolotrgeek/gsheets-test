@@ -6,23 +6,30 @@ let urls = 'B'
 let tags = 'C'
 let dates = 'D'
 let contents = 'E'
-// rows 
+let postlastEdit = 'F'
+// details 
 let firstContentRow = 4
-
+let totalColumns = 6
 //special queries
 let lastEdit = sheet + 'B1'
-
 // parsers
 let getAll = (column, row) => sheet + column + row + ':' + column
 let get = (column, row) => sheet + column + row
-
+// pre-built queries
 const queries = {
     titles: getAll(titles, firstContentRow),
     links: getAll(urls, firstContentRow),
     tags: getAll(tags, firstContentRow),
     dates: getAll(dates, firstContentRow),
     contents: getAll(contents, firstContentRow),
-    posts: [getAll(titles, firstContentRow), getAll(urls, firstContentRow), getAll(tags, firstContentRow), getAll(dates, firstContentRow), lastEdit],
+    routes:  [getAll(titles, firstContentRow), 
+        getAll(urls, firstContentRow), 
+        lastEdit], 
+    posts: [getAll(titles, firstContentRow), 
+        getAll(urls, firstContentRow),
+        getAll(dates, firstContentRow), 
+        getAll(contents, firstContentRow), 
+        getAll(postlastEdit, firstContentRow)],
 }
 const apikey = 'AIzaSyDLgbHuIKYEhhDoVz9pdwkU4LgqNGMQT3A'
 const sheetid = '17mMZ4fb-IpTDbqoTxdjF_EeRpnoJuef58yMHIQI9Ri4'
@@ -64,16 +71,23 @@ const parseQuery = async (query) => new Promise((resolve, reject) => {
         reject('404')
     }
     else if (query.valueRanges) {
-        if (query.valueRanges.length !== 5) {
-            console.log('query incorrect length')
-            reject('404')
-        } else {
+        if (query.valueRanges.length === 3) {
+            result.titles = query.valueRanges[0].values
+            result.links = query.valueRanges[1].values
+            result.lastEdit = query.valueRanges[2].values[0][0]
+            resolve(result) // routes
+
+        } else if (query.valueRanges.length === totalColumns) {
             result.titles = query.valueRanges[0].values
             result.links = query.valueRanges[1].values
             result.tags = query.valueRanges[2].values
             result.dates = query.valueRanges[3].values
-            result.lastEdit = query.valueRanges[4].values
-            resolve(result)
+            result.content = query.valueRanges[4].values
+            result.lastEdit = query.valueRanges[5].values[0][0]
+            resolve(result) // posts
+        } else {
+            console.log('query incorrect length')
+            reject('404')
         }
     }
     else if (query.values) {
@@ -86,12 +100,12 @@ const buildHome = (result) => new Promise((resolve, reject) => {
     let blog = `<ul class="posts">
       ${result.titles.map((title, index) => `<li class="post-title"><a href="/${result.links[index]} ">${title}</a></li>`).join('')}
       </ul>`
-    console.log(blog)
     resolve(blog)
 
 })
 
 const buildRoutes = async (result) => new Promise((resolve, reject) => {
+    console.log('building routes')
     let routes = {}
     routes.lastEdit = result.lastEdit
     buildHome(result)
@@ -113,6 +127,7 @@ const followRoute = (routes) => {
             checkCache(path.toString())
                 .then(posts => {
                     console.log('found post in cache')
+                    console.log(posts)
                     resolve(posts.post)
                 })
                 .catch(err => {
@@ -123,7 +138,7 @@ const followRoute = (routes) => {
                         .then(result => {
                             let storePost = {}
                             storePost.post = result.post
-                            storePost.lastEdit = result.lastEdit
+                            storePost.lastEdit = get(postlastEdit, path)
                             console.log('saving post')
                             window.localStorage.setItem(path.toString(), JSON.stringify(storePost))
                             resolve(result.post)
@@ -138,9 +153,9 @@ const followRoute = (routes) => {
     })
 }
 
-
 const checkCache = (name) => new Promise((resolve, reject) => {
     let localItem = window.localStorage.getItem(name)
+    console.log('looking for newest item: '+name)
     if (!localItem) {
         reject('No local ' + name + ' found')
     } else {
@@ -148,14 +163,19 @@ const checkCache = (name) => new Promise((resolve, reject) => {
             .then(url => getQuery(url))
             .then(result => {
                 let serverTime = parseInt(result.values[0][0])
-                console.log('Last Edit: ' + serverTime)
-                if (typeof serverTime !== 'number') {
+                console.log('Server Last Edit: ' + serverTime)
+                if (!serverTime || typeof serverTime !== 'number') {
                     reject('invalid lastEdit')
                 }
                 else {
                     let foundItem = JSON.parse(localItem)
-                    console.log(foundItem)
-                    if (serverTime > foundItem.lastEdit) {
+                    console.log('Local Last Edit: ' + foundItem.lastEdit)
+                    // console.log(parseInt(foundItem.lastEdit))
+                    if (!foundItem.lastEdit || !parseInt(foundItem.lastEdit)){
+                        window.localStorage.removeItem(name)
+                        reject('local item invalid, get new one')
+                    }
+                    else if (serverTime > foundItem.lastEdit) {
                         // window.localStorage.clear()
                         window.localStorage.removeItem(name)
                         reject('local item old, get new one')
@@ -189,7 +209,7 @@ const buildSite = async () => {
         .catch(err => {
             console.log(err)
             // get from cms
-            buildQuery(queries.posts)
+            buildQuery(queries.routes)
                 .then(url => getQuery(url))
                 .then(query => parseQuery(query))
                 .then(result => buildRoutes(result))
