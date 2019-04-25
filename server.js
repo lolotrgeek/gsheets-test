@@ -2,7 +2,7 @@ const express = require('express')
 const server = express()
 const path = require('path')
 
-const home = path.join(__dirname, '/public/index.html')
+const home = path.join(__dirname, '/index.html')
 
 server.use(express.static('public'))
 
